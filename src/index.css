@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .star {
+    @apply cursor-pointer before:text-2xl;
+  }
+
+  .starActive {
+    @apply  before:content-["\2605"];
+  }
+
+  .starDefault {
+    @apply  before:content-["\2606"];
+  }
+}

@@ -1,73 +1,70 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Fuse from 'fuse.js';
-import { twMerge } from 'tailwind-merge';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { SearchInput } from './SearchInput';
+import { CategorySearch } from '../types/coins';
+import { SearchCategory } from './SearchCategory';
+import searchIcon from '../icons/search-icon.svg';
 import { useOnClickOutside } from '../hooks/useOnClickOutside';
-import { Coin, SearchCategory } from '../types/coins';
-import searchIcon from '../images/icons/search-icon.svg';
-import starActiveIcon from '../images/icons/star-active-icon.svg';
-import starDefaultIcon from '../images/icons/star-default-icon.svg';
+import { SearchList } from './SearchList';
+import { getAllCoins } from '../api/search';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { twMerge } from 'tailwind-merge';
 
-interface Props {
-  title: string;
-  coins: Coin[];
-  query: string;
-  setQuery: (item: string) => void;
-}
+const ROW_HEIGHT = 40;
+const VISIBLE_ITEMSLENGHT = 8;
+const CONTEINER_HEIGHT = ROW_HEIGHT * VISIBLE_ITEMSLENGHT;
 
-export const DropdownButton: React.FC<Props> = ({
-  title,
-  coins,
-  query,
-  setQuery,
-}) => {
-  const [activeCategory, setActiveCategory] = useState<SearchCategory>(
-    SearchCategory.ALL_COINS,
-  );
-  const [dropdownToggle, setDropdownToggle] = useState(false);
-  const [filteredCoins, setFilteredCoins] = useState<Coin[]>(coins);
-  const [favouriteCoins, setFavouriteCoins] = useLocalStorage<Coin[]>(
+export const DropdownButton = () => {
+  const [query, setQuery] = useState('');
+  const [coins, setCoins] = useState<string[]>([]);
+  const [filteredCoins, setFilteredCoins] = useState<string[]>([]);
+  const [favouriteCoins, setFavouriteCoins] = useLocalStorage<string[]>(
     'favouriteCoins',
     [],
   );
-  const dropdownRef = useRef(null);
-  const setUniqCoins = useMemo(
-    () => new Set(favouriteCoins.map(coin => coin.id)),
-    [favouriteCoins],
+
+  const [activeCategory, setActiveCategory] = useState(
+    CategorySearch.ALL_COINS,
   );
-  const selectCategory =
-    activeCategory === SearchCategory.ALL_COINS
-      ? filteredCoins
-      : favouriteCoins;
-
-  const handleClickOutside = () => {
-    setDropdownToggle(false);
-  };
-
-  useOnClickOutside([dropdownRef], handleClickOutside);
-
-  const fuseOptions = useMemo(
-    () => ({
-      keys: ['title'],
-      threshold: 0.4,
-    }),
-    [],
-  );
+  const [isModal, setIsModal] = useState(false);
+  const modalRef = useRef<HTMLDivElement | null>(null);
 
   const fuse = useMemo(
-    () => new Fuse(coins, fuseOptions),
-    [coins, fuseOptions],
+    () =>
+      new Fuse(coins, {
+        threshold: 0.4,
+      }),
+    [coins],
+  );
+  const setUniqCoins = useMemo(
+    () => new Set(favouriteCoins.map(coin => coin)),
+    [favouriteCoins],
   );
 
+  const SettingsList = {
+    rowHeight: ROW_HEIGHT,
+    totalItems: coins.length - 1,
+    items: coins,
+    containerHeight: CONTEINER_HEIGHT.toString(),
+    visibleItemsLength: VISIBLE_ITEMSLENGHT,
+  };
+
+  const handleClickOutside = () => {
+    setIsModal(false);
+    setQuery('');
+  };
+
+  useOnClickOutside([modalRef], handleClickOutside);
+
   const handleFavouriteCoin = useCallback(
-    (e: React.MouseEvent<HTMLImageElement, MouseEvent>, coin: Coin) => {
+    (e: React.MouseEvent<HTMLParagraphElement, MouseEvent>, coin: string) => {
       e.stopPropagation();
 
-      const isCoin = setUniqCoins.has(coin.id);
+      const isCoin = setUniqCoins.has(coin);
 
       if (isCoin) {
         setFavouriteCoins(currentCoins =>
-          currentCoins.filter(currentCoin => currentCoin.id !== coin.id),
+          currentCoins.filter(currentCoin => currentCoin !== coin),
         );
       } else {
         setFavouriteCoins([...favouriteCoins, coin]);
@@ -75,11 +72,6 @@ export const DropdownButton: React.FC<Props> = ({
     },
     [favouriteCoins, setUniqCoins, setFavouriteCoins],
   );
-
-  const handleChooseCoin = (coin: Coin) => {
-    setQuery(coin.title);
-    setDropdownToggle(false);
-  };
 
   useEffect(() => {
     if (query) {
@@ -91,104 +83,82 @@ export const DropdownButton: React.FC<Props> = ({
     }
   }, [query, coins, fuse]);
 
+  useEffect(() => {
+    getAllCoins().then(res => {
+      setCoins(res);
+    });
+  }, []);
+
+  const visibleCoins = useMemo(() => {
+    if (CategorySearch.ALL_COINS === activeCategory) {
+      return filteredCoins;
+    }
+
+    return favouriteCoins.filter(coin =>
+      coin.toLowerCase().includes(query.toLowerCase()),
+    );
+  }, [activeCategory, favouriteCoins, filteredCoins, query]);
+
   return (
-    <div className="relative text-gray-300" ref={dropdownRef}>
+    <>
       <button
+        type="button"
         className={twMerge(
-          `flex h-10 items-center gap-2 rounded-lg border-2 border-gray-300 bg-slate-950 p-2 text-gray-300 hover:bg-gray-400`,
-          dropdownToggle && 'bg-gray-400 hover:bg-slate-950',
+          `relative flex h-10 items-center gap-2 rounded-lg border-2 border-gray-300 bg-slate-950 p-2 text-gray-300`,
+          !isModal && 'hover:bg-gray-400',
         )}
-        onClick={() => setDropdownToggle(!dropdownToggle)}
+        onClick={() => setIsModal(true)}
+        disabled={isModal}
       >
-        <img className="aspect-square h-4" src={searchIcon} alt="Search Icon" />
-
-        <p>{title}</p>
+        <img
+          src={searchIcon}
+          alt="Search button"
+          className="aspect-square h-4"
+        />
+        SEARCH
       </button>
-      <div
-        className={twMerge(
-          `absolute right-0 top-10 hidden min-w-[260px] rounded-lg border-2 border-gray-300 bg-slate-900`,
-          dropdownToggle && 'flex flex-col',
-        )}
-      >
-        <label className="flex w-full items-center gap-2 px-4 py-2.5">
-          <img
-            className="aspect-square h-4"
-            src={searchIcon}
-            alt="Search Icon"
-          />
 
-          <input
-            type="search"
+      {isModal && (
+        <div
+          className={`absolute rounded-lg border-2 border-gray-300 bg-slate-900`}
+          ref={modalRef}
+        >
+          <SearchInput
+            image={searchIcon}
+            altImage="Search Input"
             placeholder="Search..."
-            className="w-full bg-inherit text-white outline-none"
             value={query}
             onChange={e => setQuery(e.target.value)}
           />
-        </label>
 
-        <hr className="border border-gray-300" />
+          <hr className="border border-gray-300" />
 
-        <div className="flex flex-col px-2">
-          <div className="flex gap-4 py-1">
-            <button
+          <div className="flex gap-4 px-2 py-2.5">
+            <SearchCategory
               type="button"
-              className={twMerge(
-                `flex items-center justify-center gap-2 rounded-lg p-2 hover:bg-gray-400`,
-                activeCategory === SearchCategory.FAVOURITES &&
-                  'font-semibold text-white',
-              )}
-              onClick={() => setActiveCategory(SearchCategory.FAVOURITES)}
-            >
-              <img
-                className="aspect-square h-4"
-                src={starActiveIcon}
-                alt="Star Favourite"
-              />
+              disabled={activeCategory === CategorySearch.FAVOURITES}
+              activeCategory={activeCategory}
+              title={CategorySearch.FAVOURITES}
+              onClick={() => setActiveCategory(CategorySearch.FAVOURITES)}
+            />
 
-              <p>{SearchCategory.FAVOURITES}</p>
-            </button>
-
-            <button
+            <SearchCategory
               type="button"
-              className={twMerge(
-                `text-nowrap rounded-lg p-2 hover:bg-gray-400`,
-                activeCategory === SearchCategory.ALL_COINS &&
-                  'font-semibold text-white',
-              )}
-              onClick={() => setActiveCategory(SearchCategory.ALL_COINS)}
-            >
-              {SearchCategory.ALL_COINS}
-            </button>
+              disabled={activeCategory === CategorySearch.ALL_COINS}
+              title={CategorySearch.ALL_COINS}
+              activeCategory={activeCategory}
+              onClick={() => setActiveCategory(CategorySearch.ALL_COINS)}
+            />
           </div>
 
-          <hr className="border border-gray-900" />
-
-          <ul className="flex max-h-60 flex-col overflow-auto">
-            {selectCategory.map(coin => {
-              const isFavouriteCoin = favouriteCoins.find(
-                favouriteCoin => favouriteCoin.id === coin.id,
-              );
-
-              return (
-                <label
-                  key={coin.id}
-                  className={`flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-gray-400`}
-                  onClick={() => handleChooseCoin(coin)}
-                >
-                  <img
-                    className="aspect-square h-4"
-                    src={isFavouriteCoin ? starActiveIcon : starDefaultIcon}
-                    alt="Star Favourite"
-                    onClick={e => handleFavouriteCoin(e, coin)}
-                  />
-
-                  <p>{coin.title}</p>
-                </label>
-              );
-            })}
-          </ul>
+          <SearchList
+            items={visibleCoins}
+            favouriteCoins={favouriteCoins}
+            handleFavouriteCoin={handleFavouriteCoin}
+            SettingsList={SettingsList}
+          />
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 };
